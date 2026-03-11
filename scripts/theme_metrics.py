@@ -11,6 +11,7 @@ from pathlib import Path
 SVG_PATH = Path("github-metrics.svg")
 
 # Cyber/minimal palette: near-black, cyan accents, slate text.
+# Includes both default lowlighter colors AND previously themed (gold) colors.
 COLOR_MAP = {
     "#777": "#94a3b8",
     "#666": "#64748b",
@@ -35,17 +36,31 @@ COLOR_MAP = {
     "#54aeff": "#38bdf8",
     "#b6e3ff": "#67e8f9",
     "#24292f": "#22d3ee",
+    # Gold theme (so re-theming works on already-themed SVGs)
+    "#F2E9D8": "#94a3b8",
+    "#F5EDE0": "#94a3b8",
+    "#E0B354": "#22d3ee",
+    "#C69026": "#22d3ee",
+    "#D8C39A": "#64748b",
+    "#1F1406": "#0a0e14",
+    "#2A1D10": "#0f172a",
+    "#6B4A19": "#0d9488",
+    "#8A5D1F": "#14b8a6",
+    "#B57929": "#2dd4bf",
+    "#D6A84A": "#67e8f9",
+    "#A6671C": "#fb923c",
+    "#140D05": "#020617",
 }
 
 TEXT_MAP = {
     "rgba(27,31,35,.04)": "rgba(34,211,238,.06)",
     "rgba(27,31,35,.06)": "rgba(34,211,238,.1)",
+    "rgba(198,144,38,.16)": "rgba(34,211,238,.1)",
+    "rgba(198,144,38,.22)": "rgba(34,211,238,.12)",
 }
 
-SVG_STYLE_NEEDLE = (
-    "svg{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif,"
-    "Apple Color Emoji,Segoe UI Emoji;font-size:14px;color:#777}"
-)
+# Match the root svg{...} block only (not "h1 svg,h2 svg{...}"). Root block has font-family.
+SVG_STYLE_PATTERN = re.compile(r"svg\{font-family:[^}]+\}")
 SVG_STYLE_REPLACEMENT = (
     "svg{font-family:ui-monospace,SFMono-Regular,SF Mono,Menlo,Consolas,Monaco,monospace;"
     "font-size:13px;color:#94a3b8;letter-spacing:.02em;"
@@ -61,14 +76,36 @@ H1_H2_PATTERN = re.compile(
 )
 H1_H2_REPLACEMENT = "h1,h2{margin:8px 0 2px;padding:0;color:#22d3ee;font-size:18px;font-weight:600;letter-spacing:.05em}h2{font-weight:500;font-size:15px}"
 FIELD_SVG_PATTERN = re.compile(
-    r"\.field svg\{margin:0 8px;fill:#[0-9a-fA-F]+;flex-shrink:0\}",
+    r"\.field svg\{margin:0 8px;fill:#[0-9a-fA-F]+;flex-shrink:0[^}]*\}",
 )
-FIELD_SVG_REPLACEMENT = ".field svg{margin:0 8px;fill:#22d3ee;flex-shrink:0;opacity:.9}"
+FIELD_SVG_REPLACEMENT = ".field svg{margin:0 8px;fill:#22d3ee;flex-shrink:0;opacity:.85}"
+
+FOOTER_PATTERN = re.compile(r"footer\{[^}]+\}")
+FOOTER_REPLACEMENT = (
+    "footer{margin-top:4px;font-size:9px;font-style:normal;"
+    "color:#334155;text-align:right;display:flex;flex-direction:column;"
+    "justify-content:flex-end;padding:0 4px;opacity:.7}"
+)
+
+FIELD_PATTERN = re.compile(r"\.field\{display:flex;align-items:center;margin-bottom:\d+px;white-space:nowrap\}")
+FIELD_REPLACEMENT = ".field{display:flex;align-items:center;margin-bottom:3px;white-space:nowrap}"
+
+CALENDAR_DAY_PATTERN = re.compile(r"\.calendar \.day\{outline:[^}]+\}")
+CALENDAR_DAY_REPLACEMENT = ".calendar .day{outline:1px solid rgba(34,211,238,.08);outline-offset:-1px}"
+
+# Add 10% height so footer and bottom content aren't clipped.
+HEIGHT_PATTERN = re.compile(r'(<svg xmlns="[^"]+" width="\d+" )height="(\d+)"')
 
 
-# Remove activity fields that show "0 X" (e.g. "0 Issues opened")
+def _add_height_margin(m: re.Match) -> str:
+    original_h = int(m.group(2))
+    new_h = int(original_h * 1.10)
+    return f'{m.group(1)}height="{new_h}"'
+
+# Hide fields showing "0 ..." (e.g. "0 Issues opened").
+# Uses negative lookahead (?!</svg>) so the match stays within a single <svg>...</svg>.
 ZERO_FIELD_PATTERN = re.compile(
-    r'<div class="field">\s*<svg[\s\S]*?</svg>\s*0 [^<]+</div>',
+    r'<div class="field">\s*<svg[^>]*>(?:(?!</svg>).)*</svg>\s*0\s[^<]+</div>',
     re.DOTALL,
 )
 
@@ -76,24 +113,31 @@ ZERO_FIELD_PATTERN = re.compile(
 def apply_theme(svg_text: str) -> str:
     themed = svg_text
 
-    # Apply minimal cyber/hacker base styles.
-    themed = themed.replace(SVG_STYLE_NEEDLE, SVG_STYLE_REPLACEMENT)
+    # Apply minimal cyber/hacker base styles (regex works on any svg block).
+    themed = SVG_STYLE_PATTERN.sub(SVG_STYLE_REPLACEMENT, themed)
 
     for source, target in TEXT_MAP.items():
         themed = themed.replace(source, target)
 
+    color_map_lower = {k.lower(): v for k, v in COLOR_MAP.items()}
     pattern = re.compile(
         "|".join(re.escape(color) for color in sorted(COLOR_MAP, key=len, reverse=True)),
         flags=re.IGNORECASE,
     )
-    themed = pattern.sub(lambda m: COLOR_MAP[m.group(0).lower()], themed)
+    themed = pattern.sub(lambda m: color_map_lower[m.group(0).lower()], themed)
 
-    # Hide metrics with zero value for a cleaner look
+    # Hide zero-value metrics for a cleaner card
     themed = ZERO_FIELD_PATTERN.sub("", themed)
 
-    # Typography overrides for hacker aesthetic
+    # Typography and layout overrides for hacker aesthetic
     themed = H1_H2_PATTERN.sub(H1_H2_REPLACEMENT, themed)
     themed = FIELD_SVG_PATTERN.sub(FIELD_SVG_REPLACEMENT, themed)
+    themed = FOOTER_PATTERN.sub(FOOTER_REPLACEMENT, themed)
+    themed = FIELD_PATTERN.sub(FIELD_REPLACEMENT, themed)
+    themed = CALENDAR_DAY_PATTERN.sub(CALENDAR_DAY_REPLACEMENT, themed)
+
+    # Expand height by 10% so footer isn't clipped
+    themed = HEIGHT_PATTERN.sub(_add_height_margin, themed)
 
     return themed
 
