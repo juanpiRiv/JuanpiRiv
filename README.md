@@ -66,13 +66,16 @@
 
 <br />
 
-<p align="center">
+<table align="center">
+<tr>
+<td align="center" valign="top">
   <img src="/github-metrics.svg" alt="GitHub metrics" />
-</p>
-
-<p align="center">
+</td>
+<td align="center" valign="top">
   <img src="https://streak-stats.demolab.com?user=juanpiRiv&theme=transparent&hide_border=true&ring=22d3ee&fire=38bdf8&currStreakLabel=22d3ee&sideLabels=94a3b8&sideNums=22d3ee&currStreakNum=22d3ee&dates=334155" alt="GitHub Streak" />
-</p>
+</td>
+</tr>
+</table>
 
 <br />
 
